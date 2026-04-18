@@ -424,6 +424,7 @@ struct ProfileEditView: View {
 }
 
 // MARK: - Certificate Setup View
+@available(iOS 16.0, *)
 struct CertificateSetupView: View {
     @Binding var isPresented: Bool
     @EnvironmentObject var appState: AppState
