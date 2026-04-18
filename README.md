@@ -1,0 +1,151 @@
+# AppMaster — متجر تطبيقات بديل
+
+<p align="center">
+  <img src="docs/icon.png" width="120" alt="AppMaster"/>
+</p>
+
+<p align="center">
+  <strong>تطبيق AppMaster — متجر التطبيقات البديل المفتوح المصدر</strong><br/>
+  بناه <a href="https://t.me/auuua1">عباس عقيل</a> لقناة <a href="https://t.me/Appmasster">AppMaster</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/iOS-15%2B-blue" />
+  <img src="https://img.shields.io/badge/Swift-5.9-orange" />
+  <img src="https://img.shields.io/badge/SwiftUI-5-green" />
+  <img src="https://img.shields.io/github/workflow/status/appmaster-dev/AppMaster/Build%20AppMaster%20IPA" />
+</p>
+
+---
+
+## المميزات
+
+| الميزة | الوصف |
+|---|---|
+| 🎮 أقسام تلقائية | الألعاب، التواصل الاجتماعي، التصميم، الأفلام، الأدوات |
+| 🔗 مصادر متعددة | دعم AltStore JSON + AppMaster JSON |
+| 📦 تثبيت IPA | من رابط أو ملف محلي عبر itms-services |
+| 🔐 شهادة شخصية | P12 + Mobileprovision لكل مستخدم |
+| 📱 عرض UDID | مثل AltStore تماماً |
+| 🌍 6 لغات | العربية، الإنجليزية، الروسية، الصينية، الألمانية، الفارسية |
+| 🎯 Cinemana | استبدال Bundle ID تلقائي عند التثبيت |
+
+---
+
+## البناء عبر GitHub Actions
+
+### بدون Xcode / Mac محلي:
+
+1. **Fork** هذا المستودع
+2. اذهب إلى **Actions** → **Build AppMaster IPA**
+3. اضغط **Run workflow**
+
+### للبناء الموقّع (IPA حقيقي):
+
+أضف هذه **Secrets** في إعدادات المستودع:
+
+| Secret | الوصف |
+|---|---|
+| `CERTIFICATE_BASE64` | شهادة P12 مشفرة Base64 |
+| `CERTIFICATE_PASSWORD` | كلمة مرور شهادة P12 |
+| `PROVISIONING_PROFILE_BASE64` | ملف Provision مشفر Base64 |
+| `TEAM_ID` | معرف فريق المطور (مثال: `ABC123XYZ`) |
+
+**تحويل الملفات إلى Base64:**
+```bash
+base64 -i MyCertificate.p12 | pbcopy
+base64 -i MyApp.mobileprovision | pbcopy
+```
+
+---
+
+## هيكل المشروع
+
+```
+AppMaster/
+├── .github/workflows/
+│   └── build.yml              ← GitHub Actions
+├── AppMaster.xcodeproj/
+│   └── project.pbxproj
+├── AppMaster/
+│   ├── App/
+│   │   ├── AppMasterApp.swift
+│   │   └── AppState.swift
+│   ├── Models/
+│   │   └── Models.swift
+│   ├── Services/
+│   │   ├── StorageService.swift
+│   │   ├── SourceService.swift
+│   │   └── IPAInstaller.swift     ← شرط Cinemana هنا
+│   ├── Views/
+│   │   ├── ContentView.swift
+│   │   ├── Home/
+│   │   │   ├── HomeView.swift
+│   │   │   └── AppDetailView.swift
+│   │   ├── Categories/
+│   │   │   └── BrowseCategoriesView.swift
+│   │   ├── Sources/
+│   │   │   └── SourcesView.swift
+│   │   ├── Install/
+│   │   │   └── LibraryView.swift
+│   │   └── Settings/
+│   │       └── SettingsView.swift
+│   ├── Resources/Localizations/
+│   │   ├── ar.lproj/
+│   │   ├── en.lproj/
+│   │   ├── ru.lproj/
+│   │   ├── zh-Hans.lproj/
+│   │   ├── de.lproj/
+│   │   └── fa.lproj/
+│   ├── Assets.xcassets/
+│   └── Info.plist
+└── sources.json               ← ملف المصادر الرسمي
+```
+
+---
+
+## إضافة تطبيقات للمتجر
+
+عدّل ملف `sources.json` مباشرة. لكل تطبيق:
+
+```json
+{
+  "id": "com.example.app",
+  "name": "اسم التطبيق",
+  "bundleID": "com.example.app",
+  "version": "1.0.0",
+  "description": "وصف التطبيق",
+  "iconURL": "https://example.com/icon.png",
+  "downloadURL": "https://example.com/app.ipa",
+  "category": "games",
+  "developer": "اسم المطور",
+  "size": 50000000
+}
+```
+
+**قيم `category` المتاحة:**
+- `games` — الألعاب
+- `social` — التواصل الاجتماعي  
+- `design` — التصميم
+- `entertainment` — الأفلام والمسلسلات
+- `tools` — الأدوات
+- `productivity` — الإنتاجية
+
+---
+
+## شرط Cinemana
+
+أي تطبيق اسمه أو Bundle ID يحتوي على `cinemana` سيتم استبدال Bundle ID الخاص به تلقائياً بـ Bundle ID الشهادة المضافة عند التثبيت. هذا يضمن عمل التطبيق مع أي شهادة.
+
+---
+
+## التواصل
+
+| | |
+|---|---|
+| 📣 القناة | [@Appmasster](https://t.me/Appmasster) |
+| 👨‍💻 المطور | [@auuua1](https://t.me/auuua1) |
+
+---
+
+<p align="center">هذا التطبيق مُلك لقناة AppMaster</p>
