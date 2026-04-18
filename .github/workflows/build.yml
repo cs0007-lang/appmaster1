@@ -3,15 +3,7 @@ name: Build AppMaster IPA
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
-    inputs:
-      sign_ipa:
-        description: 'Sign IPA (requires secrets)'
-        required: false
-        default: 'false'
-        type: boolean
 
 jobs:
   build:
@@ -19,57 +11,12 @@ jobs:
     runs-on: macos-14
 
     steps:
-      # ── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Select Xcode version ──────────────────────────────────────────────
       - name: Select Xcode 15
         run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
-      # ── 3. Show Xcode & Swift versions ──────────────────────────────────────
-      - name: Show versions
-        run: |
-          xcodebuild -version
-          swift --version
-
-      # ── 4. List project info ─────────────────────────────────────────────────
-      - name: List project info
-        run: |
-          xcodebuild -project AppMaster.xcodeproj \
-            -list
-
-      # ── 5. Resolve dependencies (if any) ─────────────────────────────────────
-      - name: Resolve dependencies
-        run: |
-          xcodebuild -resolvePackageDependencies \
-            -project AppMaster.xcodeproj \
-            -scheme AppMaster || true
-
-      # ── 6. Build (unsigned, for CI validation) ───────────────────────────────
-      - name: Build (unsigned)
-        run: |
-          xcodebuild build \
-            -project AppMaster.xcodeproj \
-            -scheme AppMaster \
-            -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=latest' \
-            -configuration Release \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            SWIFT_COMPILATION_MODE=wholemodule \
-            | xcpretty --color || xcodebuild build \
-            -project AppMaster.xcodeproj \
-            -scheme AppMaster \
-            -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=latest' \
-            -configuration Release \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
-
-     # ── 7. Archive (Simplified) ──────────────────────────────────────────────
       - name: Archive for IPA
         run: |
           xcodebuild archive \
@@ -80,68 +27,20 @@ jobs:
             -configuration Release \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
-      # ── 8. Export IPA (Simplified) ────────────────────────────────────────────
       - name: Export IPA
         run: |
-          mkdir -p $RUNNER_TEMP/AppMaster
-          # تحويل ملف الـ .app إلى .ipa يدوياً لأنه غير موقع
-          mkdir -p $RUNNER_TEMP/AppMaster/Payload
-          cp -r $RUNNER_TEMP/AppMaster.xcarchive/Products/Applications/*.app $RUNNER_TEMP/AppMaster/Payload/
-          cd $RUNNER_TEMP/AppMaster
+          mkdir -p $RUNNER_TEMP/Payload
+          cp -r $RUNNER_TEMP/AppMaster.xcarchive/Products/Applications/AppMaster.app $RUNNER_TEMP/Payload/
+          cd $RUNNER_TEMP
           zip -r AppMaster.ipa Payload
-          rm -rf Payload
+          ls -lh AppMaster.ipa
 
-      # ── 9. Upload IPA artifact ────────────────────────────────────────────────
-      - name: Upload IPA artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: AppMaster-IPA
-          path: |
-            ${{ runner.temp }}/AppMaster/*.ipa
+          path: ${{ runner.temp }}/AppMaster.ipa
           retention-days: 30
-
-      # ── 10. Upload build logs on failure ─────────────────────────────────────
-      - name: Upload logs on failure
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: build-logs
-          path: |
-            ~/Library/Logs/DiagnosticReports/
-            /tmp/*.log
-          retention-days: 7
-
-  # ── Release job (creates GitHub Release with IPA) ───────────────────────────
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - name: Download IPA
-        uses: actions/download-artifact@v4
-        with:
-          name: AppMaster-IPA
-          path: ./release
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ./release/*.ipa
-          name: AppMaster ${{ github.ref_name }}
-          body: |
-            ## AppMaster ${{ github.ref_name }}
-
-            ### ما الجديد
-            - راجع CHANGELOG.md لمعرفة التغييرات
-
-            ### التثبيت
-            1. حمّل ملف IPA
-            2. ثبّته عبر AltStore أو Sideloadly أو AppMaster نفسه
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
