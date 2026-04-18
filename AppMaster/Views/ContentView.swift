@@ -114,29 +114,3 @@ struct ToastView: View {
     }
 }
 
-// MARK: - Install From URL
-struct InstallFromURLView: View {
-    let url: URL
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        ZStack {
-            Color(hex: "0A0A0F").ignoresSafeArea()
-            VStack(spacing: 24) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(Color(hex: "7B2FBE"))
-                Text("Installing App")
-                    .font(.title2.bold())
-                    .foregroundStyle(.white)
-                Text(url.absoluteString)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                Button("Dismiss") { dismiss() }
-                    .foregroundStyle(Color(hex: "7B2FBE"))
-            }
-        }
-    }
-}
