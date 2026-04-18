@@ -87,7 +87,8 @@ jobs:
         run: |
           mkdir -p $RUNNER_TEMP/AppMaster
           # تحويل ملف الـ .app إلى .ipa يدوياً لأنه غير موقع
-          cp -r $RUNNER_TEMP/AppMaster.xcarchive/Products/Applications/*.app $RUNNER_TEMP/AppMaster/Payload
+          mkdir -p $RUNNER_TEMP/AppMaster/Payload
+          cp -r $RUNNER_TEMP/AppMaster.xcarchive/Products/Applications/*.app $RUNNER_TEMP/AppMaster/Payload/
           cd $RUNNER_TEMP/AppMaster
           zip -r AppMaster.ipa Payload
           rm -rf Payload
@@ -143,3 +144,4 @@ jobs:
             2. ثبّته عبر AltStore أو Sideloadly أو AppMaster نفسه
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
