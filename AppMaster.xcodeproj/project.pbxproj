@@ -38,12 +38,12 @@
 		AA100005 /* SourceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceService.swift; sourceTree = "<group>"; };
 		AA100006 /* IPAInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPAInstaller.swift; sourceTree = "<group>"; };
 		AA100007 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		AA100008 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
-		AA100009 /* AppDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDetailView.swift; sourceTree = "<group>"; };
-		AA100010 /* BrowseCategoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseCategoriesView.swift; sourceTree = "<group>"; };
-		AA100011 /* SourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesView.swift; sourceTree = "<group>"; };
-		AA100012 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
-		AA100013 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AA100008 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Home/HomeView.swift; sourceTree = "<group>"; };
+		AA100009 /* AppDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Home/AppDetailView.swift; sourceTree = "<group>"; };
+		AA100010 /* BrowseCategoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Categories/BrowseCategoriesView.swift; sourceTree = "<group>"; };
+		AA100011 /* SourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourcesView.swift; sourceTree = "<group>"; };
+		AA100012 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library/LibraryView.swift; sourceTree = "<group>"; };
+		AA100013 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings/SettingsView.swift; sourceTree = "<group>"; };
 		AA100020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA100021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA100030 /* ar.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ar; path = Resources/Localizations/ar.lproj; sourceTree = "<group>"; };
