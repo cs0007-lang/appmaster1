@@ -69,72 +69,28 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      # ── 7. Archive for IPA export (requires signing secrets) ─────────────────
+     # ── 7. Archive (Simplified) ──────────────────────────────────────────────
       - name: Archive for IPA
-        if: ${{ github.event.inputs.sign_ipa == 'true' || github.ref == 'refs/heads/main' }}
-        env:
-          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
-          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
         run: |
-          # Import certificate
-          if [ -n "$CERTIFICATE_BASE64" ]; then
-            echo "$CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-            security create-keychain -p "" build.keychain
-            security default-keychain -s build.keychain
-            security unlock-keychain -p "" build.keychain
-            security import certificate.p12 -k build.keychain \
-              -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-            security set-key-partition-list \
-              -S apple-tool:,apple: -s -k "" build.keychain
-          fi
-
-          # Import provisioning profile
-          if [ -n "$PROVISIONING_PROFILE_BASE64" ]; then
-            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-            echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
-              > ~/Library/MobileDevice/Provisioning\ Profiles/AppMaster.mobileprovision
-          fi
-
-          # Archive
           xcodebuild archive \
             -project AppMaster.xcodeproj \
             -scheme AppMaster \
             -sdk iphoneos \
             -archivePath $RUNNER_TEMP/AppMaster.xcarchive \
             -configuration Release \
-            DEVELOPMENT_TEAM="${{ secrets.TEAM_ID }}" \
-            PRODUCT_BUNDLE_IDENTIFIER="com.appmster.app" \
-            | xcpretty --color || true
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
 
-      # ── 8. Export IPA ─────────────────────────────────────────────────────────
+      # ── 8. Export IPA (Simplified) ────────────────────────────────────────────
       - name: Export IPA
-        if: ${{ github.event.inputs.sign_ipa == 'true' || github.ref == 'refs/heads/main' }}
         run: |
-          cat > /tmp/ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>ad-hoc</string>
-            <key>teamID</key>
-            <string>${{ secrets.TEAM_ID }}</string>
-            <key>compileBitcode</key>
-            <false/>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>thinning</key>
-            <string>&lt;none&gt;</string>
-          </dict>
-          </plist>
-          EOF
-
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/AppMaster.xcarchive \
-            -exportOptionsPlist /tmp/ExportOptions.plist \
-            -exportPath $RUNNER_TEMP/AppMaster \
-            | xcpretty --color || true
+          mkdir -p $RUNNER_TEMP/AppMaster
+          # تحويل ملف الـ .app إلى .ipa يدوياً لأنه غير موقع
+          cp -r $RUNNER_TEMP/AppMaster.xcarchive/Products/Applications/*.app $RUNNER_TEMP/AppMaster/Payload
+          cd $RUNNER_TEMP/AppMaster
+          zip -r AppMaster.ipa Payload
+          rm -rf Payload
 
       # ── 9. Upload IPA artifact ────────────────────────────────────────────────
       - name: Upload IPA artifact
