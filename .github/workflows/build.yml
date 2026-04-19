@@ -23,6 +23,8 @@ jobs:
         run: |
           CERT_PATH=$RUNNER_TEMP/certificate.p12
           printf "%s" "$CERTIFICATE_P12" | base64 --decode > $CERT_PATH
+          echo "حجم الملف: $(wc -c < $CERT_PATH) bytes"
+          echo "الحجم المتوقع: 3164 bytes"
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           security create-keychain -p "keychain_password" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
