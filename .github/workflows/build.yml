@@ -1,4 +1,4 @@
-name: Build AppMaster IPA
+﻿name: Build AppMaster IPA
 
 on:
   push:
@@ -20,18 +20,14 @@ jobs:
       - name: Install Certificate
         env:
           CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
         run: |
           CERT_PATH=$RUNNER_TEMP/certificate.p12
-          printf '%s' "$CERTIFICATE_P12" | base64 --decode > $CERT_PATH
+          printf "%s" "$CERTIFICATE_P12" | base64 --decode > $CERT_PATH
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           security create-keychain -p "keychain_password" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "keychain_password" $KEYCHAIN_PATH
-          file $CERT_PATH
-ls -la $CERT_PATH
-openssl pkcs12 -in $CERT_PATH -noout -passin pass:1 2>&1 || echo "???"
-security import $CERT_PATH -P "1" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security import $CERT_PATH -P "1" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
 
       - name: Install Provisioning Profile
@@ -39,7 +35,7 @@ security import $CERT_PATH -P "1" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
         run: |
           PP_PATH=$RUNNER_TEMP/profile.mobileprovision
-          printf '%s' "$PROVISIONING_PROFILE" | base64 --decode > $PP_PATH
+          printf "%s" "$PROVISIONING_PROFILE" | base64 --decode > $PP_PATH
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           UUID=$(security cms -D -i $PP_PATH | plutil -extract UUID raw -)
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
@@ -78,5 +74,3 @@ security import $CERT_PATH -P "1" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           name: AppMaster-IPA
           path: ${{ runner.temp }}/IPA/*.ipa
           retention-days: 30
-
-
