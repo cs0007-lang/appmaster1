@@ -28,7 +28,10 @@ jobs:
           security create-keychain -p "keychain_password" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "keychain_password" $KEYCHAIN_PATH
-          security import $CERT_PATH -P "1" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          file $CERT_PATH
+ls -la $CERT_PATH
+openssl pkcs12 -in $CERT_PATH -noout -passin pass:1 2>&1 || echo "???"
+security import $CERT_PATH -P "1" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
 
       - name: Install Provisioning Profile
@@ -75,4 +78,5 @@ jobs:
           name: AppMaster-IPA
           path: ${{ runner.temp }}/IPA/*.ipa
           retention-days: 30
+
 
