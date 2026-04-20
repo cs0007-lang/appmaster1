@@ -34,10 +34,11 @@ jobs:
             -k $KEYCHAIN_PATH
 
           security list-keychain -d user -s $KEYCHAIN_PATH
+
           security set-key-partition-list \
-            -S apple-tool:,apple: \
-            -k "keychain_password" \
-            $KEYCHAIN_PATH
+            -S apple-tool:,apple:,codesign: \
+            -s -k "keychain_password" \
+            $KEYCHAIN_PATH || true
 
       - name: Install Provisioning Profile
         run: |
