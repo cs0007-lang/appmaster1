@@ -171,7 +171,7 @@ struct SourceCard: View {
     func refreshSource() {
         isRefreshing = true
         Task {
-            await appState.refreshAllSources()
+            await appState.refreshSource(id: source.id)
             await MainActor.run { isRefreshing = false }
         }
     }

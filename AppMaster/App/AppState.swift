@@ -62,6 +62,18 @@ class AppState: ObservableObject {
         storageService.saveSources(sources)
     }
 
+    func refreshSource(id: String) async {
+        guard let idx = sources.firstIndex(where: { $0.id == id }) else { return }
+        await MainActor.run { isLoading = true }
+        if let apps = await sourceService.fetchApps(from: sources[idx].url) {
+            await MainActor.run {
+                sources[idx].apps = apps
+            }
+            storageService.saveSources(sources)
+        }
+        await MainActor.run { isLoading = false }
+    }
+
     func addSource(url: String) async -> Bool {
         guard let apps = await sourceService.fetchApps(from: url) else { return false }
         let name = apps.first?.sourceTitle ?? url

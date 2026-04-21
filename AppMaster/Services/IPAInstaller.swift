@@ -6,52 +6,52 @@ class IPAInstaller: ObservableObject {
     @Published var statusMessage: String = ""
     @Published var isInstalling: Bool = false
 
-    // Cinemana special bundle ID replacement constant
     static let cinemanaKeyword = "cinemana"
 
+    /// Installs or delivers an IPA: opens enterprise/OTA links, otherwise downloads and presents the share sheet
+    /// (AltStore, Files, AirDrop, etc.). True on-device re-signing is not available inside the client app.
     func install(app: AppEntry, certificate: Certificate?, completion: @escaping (Bool, String?) -> Void) {
-        guard let cert = certificate else {
+        guard certificate != nil else {
             completion(false, NSLocalizedString("error_no_certificate", comment: ""))
             return
         }
+
+        guard let remote = URL(string: app.downloadURL) else {
+            completion(false, InstallError.invalidURL.errorDescription)
+            return
+        }
+
         isInstalling = true
         progress = 0
         statusMessage = NSLocalizedString("status_downloading", comment: "")
 
         Task {
             do {
-                // 1. Download IPA
-                let ipaData = try await downloadIPA(from: app.downloadURL)
-                await MainActor.run {
-                    self.progress = 0.4
-                    self.statusMessage = NSLocalizedString("status_preparing", comment: "")
+                if remote.scheme == "itms-services" {
+                    await MainActor.run {
+                        UIApplication.shared.open(remote)
+                        self.finishInstallProgress()
+                        completion(true, nil)
+                    }
+                    return
                 }
 
-                // 2. Special handling for Cinemana
-                var finalBundleID = app.bundleID
-                if app.name.lowercased().contains(Self.cinemanaKeyword) ||
-                   app.bundleID.lowercased().contains(Self.cinemanaKeyword) {
-                    finalBundleID = cert.bundleID
-                }
-
-                // 3. Patch and sign IPA
-                let signedIPA = try await signIPA(ipaData: ipaData, bundleID: finalBundleID, certificate: cert)
-                await MainActor.run {
-                    self.progress = 0.8
-                    self.statusMessage = NSLocalizedString("status_installing", comment: "")
-                }
-
-                // 4. Install via itms-services
-                let installURL = try await prepareInstall(signedIPA: signedIPA, appName: app.name, bundleID: finalBundleID, version: app.version)
+                let localURL = try await downloadIPAToTemporaryFile(from: app.downloadURL)
                 await MainActor.run {
                     self.progress = 1.0
-                    self.isInstalling = false
-                    UIApplication.shared.open(installURL)
+                    self.finishInstallProgress()
+                    Self.presentShare(for: localURL) { success, err in
+                        completion(success, err)
+                    }
+                }
+            } catch InstallError.directInstall {
+                await MainActor.run {
+                    self.finishInstallProgress()
                     completion(true, nil)
                 }
             } catch {
                 await MainActor.run {
-                    self.isInstalling = false
+                    self.finishInstallProgress()
                     completion(false, error.localizedDescription)
                 }
             }
@@ -59,131 +59,143 @@ class IPAInstaller: ObservableObject {
     }
 
     func installFromURL(_ url: URL, certificate: Certificate?, completion: @escaping (Bool, String?) -> Void) {
-        guard let cert = certificate else {
+        if certificate == nil && url.scheme != "itms-services" {
             completion(false, NSLocalizedString("error_no_certificate", comment: ""))
             return
         }
 
         isInstalling = true
         progress = 0
+        statusMessage = NSLocalizedString("status_preparing", comment: "")
 
-        if url.pathExtension == "ipa" {
-            // Local file
+        if url.scheme == "itms-services" {
+            UIApplication.shared.open(url)
+            finishInstallProgress()
+            completion(true, nil)
+            return
+        }
+
+        if url.isFileURL {
             Task {
+                let access = url.startAccessingSecurityScopedResource()
+                defer {
+                    if access { url.stopAccessingSecurityScopedResource() }
+                }
                 do {
-                    let ipaData = try Data(contentsOf: url)
-                    statusMessage = NSLocalizedString("status_preparing", comment: "")
-                    progress = 0.3
-
-                    // Detect Cinemana from filename
-                    let filename = url.lastPathComponent.lowercased()
-                    var bundleID = "com.unknown.app"
-                    if filename.contains(Self.cinemanaKeyword) {
-                        bundleID = cert.bundleID
+                    let dest = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(UUID().uuidString + ".ipa")
+                    if FileManager.default.fileExists(atPath: dest.path) {
+                        try FileManager.default.removeItem(at: dest)
                     }
-
-                    let signedIPA = try await signIPA(ipaData: ipaData, bundleID: bundleID, certificate: cert)
-                    progress = 0.8
-
-                    let installURL = try await prepareInstall(signedIPA: signedIPA, appName: url.deletingPathExtension().lastPathComponent, bundleID: bundleID, version: "1.0")
+                    try FileManager.default.copyItem(at: url, to: dest)
                     await MainActor.run {
                         self.progress = 1.0
-                        self.isInstalling = false
-                        UIApplication.shared.open(installURL)
-                        completion(true, nil)
+                        self.finishInstallProgress()
+                        Self.presentShare(for: dest) { success, err in
+                            completion(success, err)
+                        }
                     }
                 } catch {
                     await MainActor.run {
-                        self.isInstalling = false
+                        self.finishInstallProgress()
                         completion(false, error.localizedDescription)
                     }
                 }
             }
-        } else if url.scheme == "itms-services" {
-            // Direct itms-services URL
-            UIApplication.shared.open(url)
-            isInstalling = false
-            completion(true, nil)
-        } else {
-            isInstalling = false
-            completion(false, "Unsupported URL format")
+            return
         }
+
+        if url.scheme == "https" || url.scheme == "http" {
+            Task {
+                do {
+                    let localURL = try await downloadIPAToTemporaryFile(from: url.absoluteString)
+                    await MainActor.run {
+                        self.progress = 1.0
+                        self.finishInstallProgress()
+                        Self.presentShare(for: localURL) { success, err in
+                            completion(success, err)
+                        }
+                    }
+                } catch InstallError.directInstall {
+                    await MainActor.run {
+                        self.finishInstallProgress()
+                        completion(true, nil)
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.finishInstallProgress()
+                        completion(false, error.localizedDescription)
+                    }
+                }
+            }
+            return
+        }
+
+        finishInstallProgress()
+        completion(false, InstallError.unsupportedURL.errorDescription)
     }
 
-    // MARK: - Private Helpers
+    private func finishInstallProgress() {
+        isInstalling = false
+        statusMessage = ""
+    }
 
-    private func downloadIPA(from urlString: String) async throws -> Data {
+    private func downloadIPAToTemporaryFile(from urlString: String) async throws -> URL {
         guard let url = URL(string: urlString) else {
             throw InstallError.invalidURL
         }
 
-        // For direct itms-services links, open directly
         if url.scheme == "itms-services" {
             await MainActor.run { UIApplication.shared.open(url) }
             throw InstallError.directInstall
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+        let (tempURL, response) = try await URLSession.shared.download(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            try? FileManager.default.removeItem(at: tempURL)
             throw InstallError.downloadFailed
         }
-        return data
-    }
 
-    private func signIPA(ipaData: Data, bundleID: String, certificate: Certificate) async throws -> Data {
-        // In a real implementation, this would use zsign or similar on-device signing
-        // For this project, we create a proper signing pipeline
-        // The actual signing happens server-side or via a companion macOS tool
-        // Here we return the data as-is for the itms-services installation path
-        return ipaData
-    }
-
-    private func prepareInstall(signedIPA: Data, appName: String, bundleID: String, version: String) async throws -> URL {
-        // Create plist for itms-services installation
-        let plist = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>items</key>
-            <array>
-                <dict>
-                    <key>assets</key>
-                    <array>
-                        <dict>
-                            <key>kind</key>
-                            <string>software-package</string>
-                            <key>url</key>
-                            <string>PLACEHOLDER_URL</string>
-                        </dict>
-                    </array>
-                    <key>metadata</key>
-                    <dict>
-                        <key>bundle-identifier</key>
-                        <string>\(bundleID)</string>
-                        <key>bundle-version</key>
-                        <string>\(version)</string>
-                        <key>kind</key>
-                        <string>software</string>
-                        <key>title</key>
-                        <string>\(appName)</string>
-                    </dict>
-                </dict>
-            </array>
-        </dict>
-        </plist>
-        """
-
-        let tempDir = FileManager.default.temporaryDirectory
-        let plistURL = tempDir.appendingPathComponent("install.plist")
-        try plist.data(using: .utf8)?.write(to: plistURL)
-
-        // Build itms-services URL
-        let encodedPlist = plistURL.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        guard let installURL = URL(string: "itms-services://?action=download-manifest&url=\(encodedPlist)") else {
-            throw InstallError.installFailed
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".ipa")
+        if FileManager.default.fileExists(atPath: dest.path) {
+            try FileManager.default.removeItem(at: dest)
         }
-        return installURL
+        try FileManager.default.moveItem(at: tempURL, to: dest)
+        return dest
+    }
+
+    private static func presentShare(for fileURL: URL, completion: @escaping (Bool, String?) -> Void) {
+        DispatchQueue.main.async {
+            guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+                  let root = scene.keyWindow?.rootViewController else {
+                completion(false, NSLocalizedString("error_install_failed", comment: ""))
+                return
+            }
+            let presenter = topViewController(from: root)
+            let activity = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+            activity.completionWithItemsHandler = { _, _, _, _ in
+                completion(true, nil)
+            }
+            if let pop = activity.popoverPresentationController {
+                pop.sourceView = presenter.view
+                pop.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 0, height: 0)
+                pop.permittedArrowDirections = []
+            }
+            presenter.present(activity, animated: true)
+        }
+    }
+
+    private static func topViewController(from vc: UIViewController) -> UIViewController {
+        if let nav = vc as? UINavigationController, let visible = nav.visibleViewController {
+            return topViewController(from: visible)
+        }
+        if let tab = vc as? UITabBarController, let selected = tab.selectedViewController {
+            return topViewController(from: selected)
+        }
+        if let presented = vc.presentedViewController {
+            return topViewController(from: presented)
+        }
+        return vc
     }
 }
 
@@ -194,6 +206,7 @@ enum InstallError: LocalizedError {
     case installFailed
     case directInstall
     case noCertificate
+    case unsupportedURL
 
     var errorDescription: String? {
         switch self {
@@ -203,6 +216,13 @@ enum InstallError: LocalizedError {
         case .installFailed: return NSLocalizedString("error_install_failed", comment: "")
         case .directInstall: return "Direct install"
         case .noCertificate: return NSLocalizedString("error_no_certificate", comment: "")
+        case .unsupportedURL: return NSLocalizedString("error_unsupported_url", comment: "")
         }
+    }
+}
+
+private extension UIWindowScene {
+    var keyWindow: UIWindow? {
+        windows.first { $0.isKeyWindow } ?? windows.first
     }
 }

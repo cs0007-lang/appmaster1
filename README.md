@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/iOS-15%2B-blue" />
+  <img src="https://img.shields.io/badge/iOS-17%2B-blue" />
   <img src="https://img.shields.io/badge/Swift-5.9-orange" />
   <img src="https://img.shields.io/badge/SwiftUI-5-green" />
   <img src="https://img.shields.io/github/workflow/status/appmaster-dev/AppMaster/Build%20AppMaster%20IPA" />
@@ -42,16 +42,17 @@
 
 ### للبناء الموقّع (IPA حقيقي):
 
-أضف هذه **Secrets** في إعدادات المستودع:
+أضف هذه **Secrets** في إعدادات المستودع (Settings → Secrets and variables → Actions):
 
 | Secret | الوصف |
 |---|---|
-| `CERTIFICATE_BASE64` | شهادة P12 مشفرة Base64 |
-| `CERTIFICATE_PASSWORD` | كلمة مرور شهادة P12 |
-| `PROVISIONING_PROFILE_BASE64` | ملف Provision مشفر Base64 |
-| `TEAM_ID` | معرف فريق المطور (مثال: `ABC123XYZ`) |
+| `CERTIFICATE_P12_BASE64` | ملف P12 مُشفَّر بـ Base64 |
+| `CERTIFICATE_PASSWORD` | كلمة مرور ملف P12 |
+| `PROVISIONING_PROFILE_BASE64` | ملف `.mobileprovision` مُشفَّر بـ Base64 |
 
-**تحويل الملفات إلى Base64:**
+> يجب أن يطابق نوع الـ provisioning profile خيار **Export method** عند تشغيل الـ workflow يدويًا (`ad-hoc`، `development`، أو `app-store`). معرف الفريق يُستخرَج تلقائيًا من الملف.
+
+**تحويل الملفات إلى Base64 (على macOS):**
 ```bash
 base64 -i MyCertificate.p12 | pbcopy
 base64 -i MyApp.mobileprovision | pbcopy
@@ -62,7 +63,7 @@ base64 -i MyApp.mobileprovision | pbcopy
 ## هيكل المشروع
 
 ```
-AppMaster/
+./
 ├── .github/workflows/
 │   └── build.yml              ← GitHub Actions
 ├── AppMaster.xcodeproj/

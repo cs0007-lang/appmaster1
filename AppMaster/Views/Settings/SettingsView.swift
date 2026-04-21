@@ -5,7 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var showCertSheet = false
     @State private var showProfileEdit = false
-    @State private var selectedLanguage = Locale.current.languageCode ?? "ar"
+    @AppStorage("app_interface_language") private var selectedLanguage: String = "ar"
 
     var body: some View {
         NavigationStack {
@@ -214,7 +214,7 @@ struct SettingsView: View {
                     Text("العربية").tag("ar")
                     Text("English").tag("en")
                     Text("Русский").tag("ru")
-                    Text("中文").tag("zh")
+                    Text("中文").tag("zh-Hans")
                     Text("Deutsch").tag("de")
                     Text("فارسی").tag("fa")
                 }
