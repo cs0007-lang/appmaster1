@@ -25,6 +25,10 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
           echo -n "$CERTIFICATE_P12_BASE64" | base64 --decode > $CERT_PATH
+          
+          # تشخيص
+          echo "Size: $(wc -c < $CERT_PATH)"
+          xxd $CERT_PATH | head -3
 
           security create-keychain -p "keychain123" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
