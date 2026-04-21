@@ -24,36 +24,24 @@ jobs:
           CERT_PATH=$RUNNER_TEMP/certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
+          # فك تشفير الشهادة
           echo -n "$CERTIFICATE_P12_BASE64" | base64 --decode > $CERT_PATH
 
-          pip3 install pyOpenSSL --quiet
-
-          python3 - << 'PYEOF'
-          import os
-          from OpenSSL import crypto
-
-          with open(os.environ['RUNNER_TEMP'] + '/certificate.p12', 'rb') as f:
-              p12_data = f.read()
-
-          p12 = crypto.load_pkcs12(p12_data, b'Apple123')
-
-          cert_pem = crypto.dump_certificate(crypto.FILETYPE_PEM, p12.get_certificate())
-          key_pem = crypto.dump_privatekey(crypto.FILETYPE_PEM, p12.get_privatekey())
-
-          with open(os.environ['RUNNER_TEMP'] + '/cert.pem', 'wb') as f:
-              f.write(cert_pem)
-          with open(os.environ['RUNNER_TEMP'] + '/key.pem', 'wb') as f:
-              f.write(key_pem)
-
-          print("Certificate extracted successfully")
-          PYEOF
-
+          # إنشاء keychain مؤقت
           security create-keychain -p "keychain123" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "keychain123" $KEYCHAIN_PATH
 
-          security import $RUNNER_TEMP/cert.pem -A -k $KEYCHAIN_PATH
-          security import $RUNNER_TEMP/key.pem -A -k $KEYCHAIN_PATH
+          # تثبيت الشهادة مباشرة بدون Python
+          security import $CERT_PATH \
+            -k $KEYCHAIN_PATH \
+            -P "Apple123" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "keychain123" $KEYCHAIN_PATH
 
           security list-keychain -d user -s $KEYCHAIN_PATH
           security find-identity -v -p codesigning
