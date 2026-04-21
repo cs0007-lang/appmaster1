@@ -1,0 +1,57 @@
+# IPA غير موقّع — بدون أسرار Apple. صمّم للتوقيع لاحقًا على جهازك (Sideloadly، AltStore، zsign، …).
+name: Build Unsigned IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  unsigned-ipa:
+    name: Package unsigned IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build (no code signing)
+        run: |
+          set -euo pipefail
+          DD="$RUNNER_TEMP/DerivedData"
+          XCCONFIG="$GITHUB_WORKSPACE/CI-unsigned.xcconfig"
+          xcodebuild build \
+            -project AppMaster.xcodeproj \
+            -scheme AppMaster \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath "$DD" \
+            -xcconfig "$XCCONFIG"
+
+      - name: Create IPA (Payload)
+        run: |
+          set -euo pipefail
+          DD="$RUNNER_TEMP/DerivedData"
+          APP="$DD/Build/Products/Release-iphoneos/AppMaster.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::Expected app bundle not found at $APP"
+            find "$DD/Build/Products" -name "*.app" -maxdepth 4 2>/dev/null || true
+            exit 1
+          fi
+          STAGING="$RUNNER_TEMP/ipa_staging"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING/Payload"
+          cp -R "$APP" "$STAGING/Payload/"
+          (cd "$STAGING" && zip -qry "$RUNNER_TEMP/AppMaster-unsigned.ipa" Payload)
+          ls -la "$RUNNER_TEMP/AppMaster-unsigned.ipa"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppMaster-unsigned-ipa
+          path: ${{ runner.temp }}/AppMaster-unsigned.ipa
+          retention-days: 30

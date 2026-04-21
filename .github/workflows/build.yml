@@ -54,26 +54,69 @@ jobs:
         run: |
           set -euo pipefail
           python3 - << 'PY'
-          import os, base64, pathlib
+          import os, base64, pathlib, re
           root = pathlib.Path(os.environ["RUNNER_TEMP"])
+
+          def clean_b64(raw: str) -> bytes:
+              s = re.sub(r"\s+", "", raw or "")
+              if not s:
+                  raise SystemExit("Empty Base64 input")
+              return base64.b64decode(s, validate=False)
+
           root.joinpath("signing.p12").write_bytes(
-              base64.b64decode(os.environ["CERTIFICATE_P12_BASE64"]))
+              clean_b64(os.environ["CERTIFICATE_P12_BASE64"]))
           root.joinpath("profile.mobileprovision").write_bytes(
-              base64.b64decode(os.environ["PROVISIONING_PROFILE_BASE64"]))
+              clean_b64(os.environ["PROVISIONING_PROFILE_BASE64"]))
+          p12_size = root.joinpath("signing.p12").stat().st_size
+          if p12_size < 100:
+              raise SystemExit(f"Decoded .p12 is too small ({p12_size} bytes); check CERTIFICATE_P12_BASE64")
+          print(f"Decoded signing.p12: {p12_size} bytes")
           PY
 
-      - name: Create keychain and import .p12
+      - name: Create keychain and import signing identity
         env:
           CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD="gha-signing-temp"
+          P12="$RUNNER_TEMP/signing.p12"
+          PASSFILE="$RUNNER_TEMP/p12.password"
+
+          # Password from secret: strip BOM/CRLF/spaces that break PKCS#12 MAC (common when pasting from Windows / GitHub UI)
+          python3 - << 'PY'
+          import os, pathlib
+          p = (os.environ.get("CERTIFICATE_PASSWORD") or "").replace("\ufeff", "").replace("\r\n", "\n").replace("\r", "\n").strip()
+          if not p:
+              raise SystemExit("CERTIFICATE_PASSWORD is empty after trim")
+          pathlib.Path(os.environ["RUNNER_TEMP"], "p12.password").write_text(p, encoding="utf-8")
+          PY
+
+          try_pkcs12() {
+            local legacy_flag="$1"
+            rm -f "$RUNNER_TEMP/key.pem" "$RUNNER_TEMP/cert.pem"
+            openssl pkcs12 -in "$P12" -nocerts -nodes -passin "file:${PASSFILE}" $legacy_flag -out "$RUNNER_TEMP/key.pem" &&
+            openssl pkcs12 -in "$P12" -nokeys -passin "file:${PASSFILE}" $legacy_flag -out "$RUNNER_TEMP/cert.pem"
+          }
+
+          if try_pkcs12 ""; then
+            echo "Opened .p12 with OpenSSL (default algorithms)"
+          elif try_pkcs12 "-legacy"; then
+            echo "Opened .p12 with OpenSSL -legacy (older Keychain export)"
+          else
+            echo "::error::Could not decrypt .p12 with OpenSSL. Wrong password, corrupt Base64, or file is not a PKCS#12."
+            echo "Check: (1) CERTIFICATE_PASSWORD matches the export password from Keychain. (2) Re-copy Base64 as ONE block with no spaces. (3) Re-export .p12 from Keychain Access on a Mac."
+            openssl pkcs12 -in "$P12" -nokeys -passin "file:${PASSFILE}" -legacy 2>&1 || true
+            exit 1
+          fi
+
+          chmod 600 "$PASSFILE" "$RUNNER_TEMP/key.pem" "$RUNNER_TEMP/cert.pem" 2>/dev/null || true
+
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$RUNNER_TEMP/signing.p12" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign -T /usr/bin/security
+          security import "$RUNNER_TEMP/cert.pem" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security
+          security import "$RUNNER_TEMP/key.pem" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"

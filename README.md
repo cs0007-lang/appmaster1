@@ -58,6 +58,16 @@ base64 -i MyCertificate.p12 | pbcopy
 base64 -i MyApp.mobileprovision | pbcopy
 ```
 
+### بناء IPA غير موقّع (بدون أسرار Apple) ثم التوقيع عندك
+
+إذا أردت **ملف IPA فقط** من GitHub ثم **توقّعه بنفسك** على جهازك بأداتك وشهادتك:
+
+1. من **Actions** اختر سير العمل **Build Unsigned IPA** ثم **Run workflow**.
+2. بعد النجاح نزّل الـ artifact **AppMaster-unsigned-ipa** (الملف `AppMaster-unsigned.ipa`).
+3. على جهازك استخدم أداة توقيع/تثبيت تدعم IPA (مثل **Sideloadly** أو **AltStore** أو أي أداة تستخدم **شهادتك وملف الـ provisioning**)، وحمّل هذا الـ IPA إليها ثم وقّع وثبّت.
+
+> هذا المسار **لا يحتاج** أسرار `CERTIFICATE_*` أو `PROVISIONING_PROFILE_*` في GitHub. التوقيع النهائي يكون **عندك** وليس على سيرفر GitHub.
+
 ---
 
 ## هيكل المشروع
@@ -65,7 +75,9 @@ base64 -i MyApp.mobileprovision | pbcopy
 ```
 ./
 ├── .github/workflows/
-│   └── build.yml              ← GitHub Actions
+│   ├── build.yml              ← IPA موقّع (يتطلب أسرار Apple)
+│   └── build-unsigned-ipa.yml ← IPA غير موقّع للتوقيع لاحقًا عندك
+├── CI-unsigned.xcconfig       ← إعدادات بناء بدون توقيع (لـ CI فقط)
 ├── AppMaster.xcodeproj/
 │   └── project.pbxproj
 ├── AppMaster/
