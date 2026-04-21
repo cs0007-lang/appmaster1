@@ -18,18 +18,27 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
       - name: Install Certificate
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.CERTIFICATE_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           CERT_PATH=$RUNNER_TEMP/certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          echo "${{ secrets.CERTIFICATE_P12_BASE64 }}" | base64 --decode > $CERT_PATH
+          # فك التشفير بشكل صحيح بدون line breaks
+          echo -n "$CERTIFICATE_P12_BASE64" | base64 --decode > $CERT_PATH
 
-          security create-keychain -p "keychain_password" $KEYCHAIN_PATH
+          # التحقق أن الملف تم فكه بشكل صحيح
+          echo "Certificate size: $(wc -c < $CERT_PATH) bytes"
+          file $CERT_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "keychain_password" $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           security import $CERT_PATH \
-            -P "Apple123" \
+            -P "$P12_PASSWORD" \
             -A -t cert -f pkcs12 \
             -k $KEYCHAIN_PATH
 
@@ -37,13 +46,15 @@ jobs:
 
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
-            -s -k "keychain_password" \
+            -s -k "$KEYCHAIN_PASSWORD" \
             $KEYCHAIN_PATH || true
 
       - name: Install Provisioning Profile
+        env:
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
         run: |
           PP_PATH=$RUNNER_TEMP/profile.mobileprovision
-          echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > $PP_PATH
+          echo -n "$PROVISIONING_PROFILE" | base64 --decode > $PP_PATH
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           UUID=$(security cms -D -i $PP_PATH | plutil -extract UUID raw -)
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
