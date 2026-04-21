@@ -34,7 +34,6 @@ jobs:
             -k $KEYCHAIN_PATH \
             2>&1 || true
 
-          # جرب بدون كلمة مرور
           security import $CERT_PATH \
             -P "" \
             -A -t cert -f pkcs12 \
@@ -43,6 +42,17 @@ jobs:
 
           security list-keychain -d user -s $KEYCHAIN_PATH
           security find-identity -v -p codesigning $KEYCHAIN_PATH
+
+      - name: Install Provisioning Profile
+        env:
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+        run: |
+          PP_PATH=$RUNNER_TEMP/profile.mobileprovision
+          echo -n "$PROVISIONING_PROFILE" | base64 --decode > $PP_PATH
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          UUID=$(security cms -D -i $PP_PATH | plutil -extract UUID raw -)
+          echo "Profile UUID: $UUID"
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
 
       - name: Archive
         run: |
