@@ -35,7 +35,7 @@ jobs:
           security unlock-keychain -p "keychain123" $KEYCHAIN_PATH
 
           security import $CERT_PATH \
-            -P "1" \
+            -P "Apple123" \
             -A -t cert -f pkcs12 \
             -k $KEYCHAIN_PATH
 
