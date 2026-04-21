@@ -28,20 +28,16 @@ jobs:
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "keychain123" $KEYCHAIN_PATH
 
+          # استيراد بدون التحقق من MAC
           security import $CERT_PATH \
             -P "Apple123" \
             -A -t cert -f pkcs12 \
             -k $KEYCHAIN_PATH \
-            2>&1 || true
-
-          security import $CERT_PATH \
-            -P "" \
-            -A -t cert -f pkcs12 \
-            -k $KEYCHAIN_PATH \
+            --no-mac-check \
             2>&1 || true
 
           security list-keychain -d user -s $KEYCHAIN_PATH
-          security find-identity -v -p codesigning $KEYCHAIN_PATH
+          security find-identity -v -p codesigning
 
       - name: Install Provisioning Profile
         env:
