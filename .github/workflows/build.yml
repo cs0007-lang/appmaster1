@@ -1,5 +1,5 @@
 name: Build AppMaster IPA
-
+ 
 on:
   push:
     branches: [main, master]
@@ -14,23 +14,23 @@ on:
           - ad-hoc
           - development
           - app-store
-
+ 
 jobs:
   build:
     name: Build AppMaster
     runs-on: macos-latest
     env:
       EXPORT_METHOD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.export_method || 'ad-hoc' }}
-
+ 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+ 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-
+ 
       - name: Verify signing secrets
         env:
           CERTIFICATE_P12_BASE64: ${{ secrets.CERTIFICATE_P12_BASE64 }}
@@ -46,7 +46,7 @@ jobs:
             echo "Add these in repo Settings → Secrets and variables → Actions."
             exit 1
           fi
-
+ 
       - name: Write certificate and profile
         env:
           CERTIFICATE_P12_BASE64: ${{ secrets.CERTIFICATE_P12_BASE64 }}
@@ -56,13 +56,13 @@ jobs:
           python3 - << 'PY'
           import os, base64, pathlib, re
           root = pathlib.Path(os.environ["RUNNER_TEMP"])
-
+ 
           def clean_b64(raw: str) -> bytes:
               s = re.sub(r"\s+", "", raw or "")
               if not s:
                   raise SystemExit("Empty Base64 input")
               return base64.b64decode(s, validate=False)
-
+ 
           root.joinpath("signing.p12").write_bytes(
               clean_b64(os.environ["CERTIFICATE_P12_BASE64"]))
           root.joinpath("profile.mobileprovision").write_bytes(
@@ -72,7 +72,7 @@ jobs:
               raise SystemExit(f"Decoded .p12 is too small ({p12_size} bytes); check CERTIFICATE_P12_BASE64")
           print(f"Decoded signing.p12: {p12_size} bytes")
           PY
-
+ 
       - name: Create keychain and import signing identity
         env:
           CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
@@ -82,8 +82,7 @@ jobs:
           KEYCHAIN_PASSWORD="gha-signing-temp"
           P12="$RUNNER_TEMP/signing.p12"
           PASSFILE="$RUNNER_TEMP/p12.password"
-
-          # Password from secret: strip BOM/CRLF/spaces that break PKCS#12 MAC (common when pasting from Windows / GitHub UI)
+ 
           python3 - << 'PY'
           import os, pathlib
           p = (os.environ.get("CERTIFICATE_PASSWORD") or "").replace("\ufeff", "").replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -91,14 +90,14 @@ jobs:
               raise SystemExit("CERTIFICATE_PASSWORD is empty after trim")
           pathlib.Path(os.environ["RUNNER_TEMP"], "p12.password").write_text(p, encoding="utf-8")
           PY
-
+ 
           try_pkcs12() {
             local legacy_flag="$1"
             rm -f "$RUNNER_TEMP/key.pem" "$RUNNER_TEMP/cert.pem"
             openssl pkcs12 -in "$P12" -nocerts -nodes -passin "file:${PASSFILE}" $legacy_flag -out "$RUNNER_TEMP/key.pem" &&
             openssl pkcs12 -in "$P12" -nokeys -passin "file:${PASSFILE}" $legacy_flag -out "$RUNNER_TEMP/cert.pem"
           }
-
+ 
           if try_pkcs12 ""; then
             echo "Opened .p12 with OpenSSL (default algorithms)"
           elif try_pkcs12 "-legacy"; then
@@ -109,9 +108,9 @@ jobs:
             openssl pkcs12 -in "$P12" -nokeys -passin "file:${PASSFILE}" -legacy 2>&1 || true
             exit 1
           fi
-
+ 
           chmod 600 "$PASSFILE" "$RUNNER_TEMP/key.pem" "$RUNNER_TEMP/cert.pem" 2>/dev/null || true
-
+ 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -120,7 +119,7 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
+ 
       - name: Install provisioning profile and read metadata
         id: profile
         run: |
@@ -140,15 +139,19 @@ jobs:
           app_id = ent.get("application-identifier") or ""
           if "." not in app_id:
               raise SystemExit("Could not read application-identifier from provisioning profile")
-          team_id, _profile_bundle = app_id.split(".", 1)
+          team_id, profile_bundle = app_id.split(".", 1)
           prof_name = data.get("Name") or ""
+          print(f"[Profile] App ID in profile: {profile_bundle}")
+          print(f"[Profile] Team ID: {team_id}")
+          print(f"[Profile] Profile Name: {prof_name}")
           with open(out, "a", encoding="utf-8") as gh:
               gh.write(f"team_id={team_id}\n")
+              gh.write(f"profile_bundle_id={profile_bundle}\n")
               gh.write("profile_name<<EOF\n")
               gh.write(prof_name + "\n")
               gh.write("EOF\n")
           PY
-
+ 
       - name: Read app bundle identifier from Xcode
         id: appmeta
         run: |
@@ -159,7 +162,42 @@ jobs:
             exit 1
           fi
           echo "bundle_id=$BUNDLE_ID" >> "$GITHUB_OUTPUT"
-
+          echo "[Xcode] Bundle ID from project: $BUNDLE_ID"
+ 
+      # ✅ FIX: التحقق من تطابق Bundle ID مع الـ Provisioning Profile
+      - name: Validate Bundle ID matches Provisioning Profile
+        env:
+          XCODE_BUNDLE_ID: ${{ steps.appmeta.outputs.bundle_id }}
+          PROFILE_BUNDLE_ID: ${{ steps.profile.outputs.profile_bundle_id }}
+        run: |
+          set -euo pipefail
+          echo "---------------------------------------------"
+          echo "Xcode Bundle ID   : $XCODE_BUNDLE_ID"
+          echo "Profile Bundle ID : $PROFILE_BUNDLE_ID"
+          echo "---------------------------------------------"
+ 
+          # السماح بـ wildcard profile مثل com.example.*
+          if [[ "$PROFILE_BUNDLE_ID" == *"*"* ]]; then
+            PREFIX="${PROFILE_BUNDLE_ID%\*}"
+            if [[ "$XCODE_BUNDLE_ID" == "$PREFIX"* ]]; then
+              echo "✅ Wildcard profile matches bundle ID."
+            else
+              echo "::error::Bundle ID mismatch!"
+              echo "::error::Xcode project has bundle ID: $XCODE_BUNDLE_ID"
+              echo "::error::Provisioning profile covers: $PROFILE_BUNDLE_ID"
+              echo "::error::Fix: Go to developer.apple.com → Profiles → create a new profile for App ID '$XCODE_BUNDLE_ID', then update PROVISIONING_PROFILE_BASE64 secret."
+              exit 1
+            fi
+          elif [ "$XCODE_BUNDLE_ID" != "$PROFILE_BUNDLE_ID" ]; then
+            echo "::error::Bundle ID mismatch!"
+            echo "::error::Xcode project has bundle ID: $XCODE_BUNDLE_ID"
+            echo "::error::Provisioning profile covers: $PROFILE_BUNDLE_ID"
+            echo "::error::Fix: Go to developer.apple.com → Profiles → create a new profile for App ID '$XCODE_BUNDLE_ID', then update PROVISIONING_PROFILE_BASE64 secret."
+            exit 1
+          else
+            echo "✅ Bundle ID matches Provisioning Profile."
+          fi
+ 
       - name: Resolve code signing identity
         id: signing
         run: |
@@ -180,7 +218,7 @@ jobs:
             echo "$IDENTITY"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-
+ 
       - name: Archive
         env:
           PROFILE_NAME: ${{ steps.profile.outputs.profile_name }}
@@ -198,7 +236,7 @@ jobs:
             DEVELOPMENT_TEAM="$BUILD_TEAM_ID" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
             CODE_SIGN_IDENTITY="$SIGN_IDENTITY"
-
+ 
       - name: Export IPA
         env:
           BUILD_TEAM_ID: ${{ steps.profile.outputs.team_id }}
@@ -226,7 +264,7 @@ jobs:
             -archivePath "$RUNNER_TEMP/AppMaster.xcarchive" \
             -exportPath "$RUNNER_TEMP/IPA" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
-
+ 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
