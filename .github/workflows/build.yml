@@ -1,70 +1,51 @@
 name: Build AppMaster IPA
- 
+
 on:
   push:
     branches: [main, master]
   workflow_dispatch:
-    inputs:
-      export_method:
-        description: "Export method (must match your provisioning profile type)"
-        required: false
-        default: ad-hoc
-        type: choice
-        options:
-          - ad-hoc
-          - development
-          - app-store
- 
+
 jobs:
   build:
-    name: Build AppMaster
     runs-on: macos-latest
-    env:
-      EXPORT_METHOD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.export_method || 'ad-hoc' }}
- 
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
- 
+
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
- 
-      - name: Archive
+
+      - name: Archive (no signing)
         run: |
-          set -euo pipefail
           xcodebuild archive \
             -project AppMaster.xcodeproj \
             -scheme AppMaster \
             -sdk iphoneos \
             -configuration Release \
             -archivePath "$RUNNER_TEMP/AppMaster.xcarchive" \
-            CODE_SIGNING_ALLOWED=NO
- 
-      - name: Export IPA
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Export IPA (unsigned)
         run: |
-          set -euo pipefail
-          python3 << PY
-          import os, plistlib
-          opts = {
-              "method": os.environ["EXPORT_METHOD"],
-              "signingStyle": "automatic",
-              "compileBitcode": False,
-          }
-          path = os.path.join(os.environ["RUNNER_TEMP"], "ExportOptions.plist")
-          with open(path, "wb") as f:
-              plistlib.dump(opts, f)
-          PY
-          plutil -lint "$RUNNER_TEMP/ExportOptions.plist"
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/AppMaster.xcarchive" \
-            -exportPath "$RUNNER_TEMP/IPA" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
- 
+          mkdir -p "$RUNNER_TEMP/IPA"
+          
+          # استخراج الـ .app من الأرشيف
+          APP_PATH=$(find "$RUNNER_TEMP/AppMaster.xcarchive" -name "*.app" | head -1)
+          
+          # إنشاء Payload وتحويله لـ IPA
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -r "$APP_PATH" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -r "IPA/AppMaster.ipa" Payload/
+
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: AppMaster-IPA
-          path: ${{ runner.temp }}/IPA/*.ipa
+          name: AppMaster-IPA-unsigned
+          path: ${{ runner.temp }}/IPA/AppMaster.ipa
           retention-days: 30
